@@ -1,7 +1,10 @@
 #!/bin/bash
+nStep=0;
 
 
 # TOURNAMENT TEMPLATE SPECIFIED?
+echo
+echo "-- $((++nStep)). Checking parameters"
 if [ $# -eq 0 ]; then
    echo "./encode.sh <tournament_template.pgn>"
    exit 1
@@ -9,30 +12,34 @@ fi
 if [ ! -n "$1" ]; then
    echo "A tournament template is required: script halted."
    exit 2
-fi 
+fi
 if [ ! -f "$1" ]; then
    echo "${1} not found: script halted"
    exit 3
-fi  
+fi
 
 
 # SWITCH TO WORKING DIRECTORY.
+echo
+echo "-- $((++nStep)). Switching to working directory"
 if [ ! -d "/home/michael/mg.pgn/" ]; then
    echo "Working directory not found: script halted"
    exit 4
-fi  
+fi
 cd /home/michael/mg.pgn/
 
 
 # NO REMAINING FILE FROM PREVIOUS RUN?
+echo
+echo "-- $((++nStep)). Checking if files remain from previous run."
 if [ -f "input.pgn" ]; then
    echo "input.pgn detected: script halted."
    exit 5
-fi  
+fi
 if [ -f "temp.pgn" ]; then
    echo "temp.pgn detected: script halted."
    exit 6
-fi  
+fi
 if [ -f "output.pgn" ]; then
    echo "output.pgn detected: script halted."
    exit 7
@@ -60,6 +67,8 @@ fi
 
 
 # MERGE NEW GAME WITH TOURNAMENT TEMPLATE.
+echo
+echo "-- $((++nStep)). Merging new game with tournament template."
 datCurrentDate=$(date +%Y.%m.%d)
 if [ -f "fromdroidfish.pgn" ]; then
    # Keep the 7st lines of droidfish.pgn, skip the 7st lines of template and add the move section from droidfish.pgn
@@ -73,34 +82,54 @@ else
       echo "input.pgn, normaly produced by Scid, is empty: script halted."
       trash input.pgn
       exit 12
-   fi   
+   fi
+   # Fill the seven tag roster.
+   pluma temp.pgn
    # Merge metadata from template and moves from Scid
    grep "^\[" ${1} | sed 's/Date \"????\.??\.??\"\]/Date \"'"$datCurrentDate"'\"\]/' > temp.pgn
    echo "" >> temp.pgn
    grep -v "^\[\|^$" input.pgn >> temp.pgn
-fi  
-echo "   input file and template merged"
+fi
+
+
+# ADD FIDE AND BELGIAN RATINGS.
+echo
+echo "-- $((++nStep)). Adding FIDE and Belgian ratings."
+java -jar AddRatingsToPGN.jar -i temp.pgn -o output.pgn
+mv output.pgn temp.pgn
+
+
+# DISPLAY RATING CHANGES.
+echo
+echo "-- $((++nStep)). Displaying rating changes."
+java -jar ComputeRatingChange.jar -i temp.pgn -p "George, Michaël"
 
 
 # ADD ECO, OPENING NAME TO NEW GAME AND FORMAT IT.
+echo
+echo "-- $((++nStep)). Formatting and opening completion with PGN-Extract."
 pgn-extract -e/usr/share/pgn-extract/eco.pgn -Rtagorder.txt temp.pgn -ooutput.pgn && cp output.pgn /home/michael/nicbase3/input.pgn 2> /dev/null
-echo "   processed by PGN-Extract"
 
 
 # OPEN NEW GAME IN NICBASE 3 TO GET NIC KEY.
+echo
+echo "-- $((++nStep)). Opening new game in NICBase 3 to get NIC key."
 dosbox -exit -c 'keyb be' -c 'mount d /home/michael/' -c 'd:' -c 'cd d:\nicbase3' -c 'pgn2nic.exe input.pgn input' -c 'nicbase3' 2> /dev/null
-echo "   processed by NICBase 3"
 
 
 # LET USER FILL NEW GAME METADATA.
+echo
+echo "-- $((++nStep)). Letting user user fill remaining metada."
 if [ -f "fromdroidfish.pgn" ]; then
    meld fromdroidfish.pgn output.pgn
 else
    meld input.pgn output.pgn
-fi  
+fi
 
 
 # APPEND NEW GAME TO PGN COLLECTION FLAT FILE.
+echo
+echo "-- $((++nStep)). Appending game to flat file."
 read -p "Append it to PGN collection flat file? " -n 1 -r
 echo    # (optional) move to a new line
 if [[ $REPLY =~ ^[Yy]$ ]]; then
@@ -110,14 +139,20 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "   Launching comparison for validation"
     meld MG_20*.pgn
     echo "   Compressing new PGN collection"
-    gzip -k9 $datNow 
+    gzip -k9 $datNow
+    trash "${sPreviousMGPGN}"
+    trash ${sPreviousMGPGN}.gz
 fi
 
 
 # APPEND NEW GAME TO SCID DATABASE
+echo
+echo "-- $((++nStep)). Appending game to database."
+bAppendToScidDatabase=false
 read -p "Append new game to Scid database? " -n 1 -r
 echo    # (optional) move to a new line
 if [[ $REPLY =~ ^[Yy]$ ]]; then
+    bAppendToScidDatabase=true
 	echo "   Convert new game to Scid format."
 	pgnscid output.pgn output
 	echo "   Renaming to avoid collisions."
@@ -130,7 +165,8 @@ fi
 
 
 # DELETE WORK FILES
-echo  "Deleting work files"
+echo
+echo "-- $((++nStep)). Deleting work files."
 if [ -f "input.pgn" ]; then
    trash input.pgn
 fi
@@ -161,13 +197,16 @@ fi
 if [ -f "MG_analyses_OLD.sn4" ]; then
    trash MG_analyses_OLD.sn4
 fi
-trash "${sPreviousMGPGN}"
-trash ${sPreviousMGPGN}.gz
 
 
 # LAUNCH SCID TO ALLOW USER TO ANALYSE GAME.
-echo  "Launching Scid for game analysis."
-scid MG_analyses.si4
+echo
+echo "-- $((++nStep)). Launching Scid for analysis."
+if [ "$bAppendToScidDatabase" == true ]; then
+	echo  "Launching Scid for game analysis."
+	scid MG_analyses.si4
+fi
+
 
 
 # GET OUT
